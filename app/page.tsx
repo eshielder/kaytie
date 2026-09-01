@@ -5,8 +5,9 @@ import Link from "next/link";
 import KTLogo from "@/components/KTLogo";
 import { SUBJECTS } from "@/lib/tutor/prompt";
 import { demoLogin, demoLogout, getDemoUser, type DemoUser } from "@/lib/demoAuth";
+import { speakWelcome, stopWelcome } from "@/lib/welcome";
 
-const DEMO_USER_NAME = "Demo User";
+const DEMO_USER_NAME = "Pal";
 
 export default function Landing() {
   const [user, setUser] = useState<DemoUser | null>(null);
@@ -25,11 +26,13 @@ export default function Landing() {
       if (!name) return;
       setUser(demoLogin(name));
       setNameInput("");
+      speakWelcome(name);
     },
     [nameInput]
   );
 
   const handleLogout = useCallback(() => {
+    stopWelcome();
     demoLogout();
     setUser(null);
   }, []);

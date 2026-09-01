@@ -9,6 +9,7 @@ import VoiceButton from "@/components/VoiceButton";
 import Conversation from "@/components/Conversation";
 import SessionSummary from "@/components/SessionSummary";
 import MicCheck from "@/components/MicCheck";
+import AmbientMusic from "@/components/AmbientMusic";
 import { demoLogout, getDemoUser, type DemoUser } from "@/lib/demoAuth";
 import { useRouter } from "next/navigation";
 import { VoiceAgentSession } from "@/lib/assemblyai/client";
@@ -273,6 +274,8 @@ function TutorContent() {
         </div>
       ) : (
         <div className="flex w-full max-w-md flex-1 flex-col items-center justify-center gap-8 py-6">
+          {/* Ambient background music (auto-ducks during speech) */}
+          <AmbientMusic active={isActive} currentSessionState={state} getAnalyser={getAnalyser} />
           {/* Voice interface */}
           <VoiceVisualizer state={state} getAnalyser={getAnalyser} />
 
