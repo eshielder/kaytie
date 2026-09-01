@@ -6,6 +6,8 @@ import KTLogo from "@/components/KTLogo";
 import { SUBJECTS } from "@/lib/tutor/prompt";
 import { demoLogin, demoLogout, getDemoUser, type DemoUser } from "@/lib/demoAuth";
 
+const DEMO_USER_NAME = "Demo User";
+
 export default function Landing() {
   const [user, setUser] = useState<DemoUser | null>(null);
   const [checked, setChecked] = useState(false);
@@ -115,6 +117,13 @@ export default function Landing() {
                 maxLength={40}
                 className="w-full rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-center text-base text-white placeholder:text-slate-500 focus:border-sky-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
               />
+              <button
+                type="button"
+                onClick={() => setNameInput(DEMO_USER_NAME)}
+                className="w-full rounded-xl border border-violet-400/30 bg-violet-500/10 px-4 py-2.5 text-sm font-medium text-violet-200 transition-colors hover:bg-violet-500/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+              >
+                ⚡ Auto-fill demo credentials
+              </button>
               <button
                 type="submit"
                 disabled={!nameInput.trim()}
