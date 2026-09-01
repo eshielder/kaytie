@@ -36,8 +36,29 @@ export class VoiceAgentSession {
   private endedByUser = false;
   private cleanedUp = false;
   private muted = false;
+  /**
+   * Phones have weak echo cancellation: KT's speaker audio leaks into the mic,
+   * gets transcribed as "user" speech and interrupts her own reply (audio
+   * breaks right after the first message). On touch/mobile devices we use
+   * half-duplex streaming (mic muted while KT talks) to prevent that.
+   * Desktop keeps full-duplex barge-in.
+   */
+  private readonly halfDuplex: boolean;
+  private readonly onVisibilityChange: () => void;
 
-  constructor(private callbacks: VoiceAgentSessionCallbacks) {}
+  constructor(private callbacks: VoiceAgentSessionCallbacks) {
+    this.halfDuplex =
+      typeof window !== "undefined" &&
+      (window.matchMedia("(pointer: coarse)").matches ||
+        /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent));
+    this.onVisibilityChange = () => {
+      // iOS suspends the AudioContext when the tab is backgrounded; the mic
+      // pipeline silently dies. Resume it when we become visible again.
+      if (!document.hidden && this.audioCtx?.state === "suspended") {
+        void this.audioCtx.resume().catch(() => {});
+      }
+    };
+  }
 
   get isMuted() {
     return this.muted;
@@ -268,11 +289,15 @@ export class VoiceAgentSession {
 
     this.worklet.port.onmessage = (event: MessageEvent<ArrayBuffer>) => {
       if (this.muted || !this.sessionReady) return;
+      // Half-duplex (mobile): drop mic audio while KT is speaking so her
+      // speaker output can't be echoed back and interrupt her own reply.
+      if (this.halfDuplex && this.agentSpeaking()) return;
       this.sendAudioChunk(event.data);
     };
 
     this.micSource.connect(this.micAnalyser);
     this.micSource.connect(this.worklet);
+    document.addEventListener("visibilitychange", this.onVisibilityChange);
 
     // Output path: KT's speech goes through an analyser (for the voice
     // visualizer) and then to the speakers.
@@ -285,6 +310,16 @@ export class VoiceAgentSession {
     this.sinkGain.gain.value = 0;
     this.worklet.connect(this.sinkGain);
     this.sinkGain.connect(ctx.destination);
+  }
+
+  /** True while KT's reply audio is still queued/playing on this device. */
+  private agentSpeaking(): boolean {
+    const ctx = this.audioCtx;
+    return (
+      !!ctx &&
+      this.outputSources.size > 0 &&
+      this.nextPlayTime > ctx.currentTime + 0.05
+    );
   }
 
   private sendAudioChunk(buffer: ArrayBuffer): void {
@@ -388,6 +423,7 @@ export class VoiceAgentSession {
     this.micSource?.disconnect();
     this.worklet?.disconnect();
     this.sinkGain?.disconnect();
+    document.removeEventListener("visibilitychange", this.onVisibilityChange);
     this.micAnalyser = null;
     this.outAnalyser?.disconnect();
     this.outAnalyser = null;
