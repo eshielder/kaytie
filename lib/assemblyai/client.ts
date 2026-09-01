@@ -1,4 +1,4 @@
-import { buildSystemPrompt, KT_GREETING } from "@/lib/tutor/prompt";
+import { buildGreeting, buildSystemPrompt } from "@/lib/tutor/prompt";
 import { VOICE_AGENT_WS_URL } from "@/lib/assemblyai/config";
 import type { SessionState, VoiceErrorKind } from "@/types/voice";
 
@@ -64,7 +64,7 @@ export class VoiceAgentSession {
     return this.muted;
   }
 
-  async start(subject?: string): Promise<void> {
+  async start(subject?: string, learnerName?: string): Promise<void> {
     this.callbacks.onStateChange("connecting");
 
     // 1. Mint a single-use token server-side (API key stays on the server).
@@ -100,7 +100,7 @@ export class VoiceAgentSession {
 
     // 3. Connect the WebSocket to the Voice Agent.
     try {
-      await this.connectWebSocket(token, subject);
+      await this.connectWebSocket(token, subject, learnerName);
     } catch {
       this.fail(
         "connection_failed",
@@ -129,7 +129,7 @@ export class VoiceAgentSession {
     }
   }
 
-  private connectWebSocket(token: string, subject?: string): Promise<void> {
+  private connectWebSocket(token: string, subject?: string, learnerName?: string): Promise<void> {
     return new Promise((resolve, reject) => {
       const ws = new WebSocket(`${VOICE_AGENT_WS_URL}?token=${encodeURIComponent(token)}`);
       this.ws = ws;
@@ -149,8 +149,8 @@ export class VoiceAgentSession {
           JSON.stringify({
             type: "session.update",
             session: {
-              system_prompt: buildSystemPrompt(subject),
-              greeting: KT_GREETING,
+              system_prompt: buildSystemPrompt(subject, learnerName),
+              greeting: buildGreeting(learnerName),
               input: {
                 format: { encoding: "audio/pcm", sample_rate: 24000 },
                 turn_detection: { interrupt_response: true },

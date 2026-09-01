@@ -9,6 +9,8 @@ import VoiceButton from "@/components/VoiceButton";
 import Conversation from "@/components/Conversation";
 import SessionSummary from "@/components/SessionSummary";
 import MicCheck from "@/components/MicCheck";
+import { demoLogout, getDemoUser, type DemoUser } from "@/lib/demoAuth";
+import { useRouter } from "next/navigation";
 import { VoiceAgentSession } from "@/lib/assemblyai/client";
 import type {
   SessionState,
@@ -26,6 +28,10 @@ const STATE_MESSAGES: Partial<Record<SessionState, string>> = {
 function TutorContent() {
   const searchParams = useSearchParams();
   const subject = searchParams.get("subject") ?? undefined;
+  const router = useRouter();
+
+  const [user, setUser] = useState<DemoUser | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
 
   const [state, setState] = useState<SessionState>("idle");
   const [statusMessage, setStatusMessage] = useState("Ready when you are.");
@@ -41,6 +47,24 @@ function TutorContent() {
   useEffect(() => {
     transcriptRef.current = transcript;
   }, [transcript]);
+
+  // Demo auth gate: no logged-in user → back to the login screen.
+  useEffect(() => {
+    const u = getDemoUser();
+    if (!u) {
+      router.replace("/");
+      return;
+    }
+    setUser(u);
+    setAuthChecked(true);
+  }, [router]);
+
+  const handleLogout = useCallback(() => {
+    sessionRef.current?.end();
+    sessionRef.current = null;
+    demoLogout();
+    router.replace("/");
+  }, [router]);
 
   const getAnalyser = useCallback(() => {
     const session = sessionRef.current;
@@ -102,8 +126,8 @@ function TutorContent() {
     });
 
     sessionRef.current = session;
-    await session.start(subject);
-  }, [subject]);
+    await session.start(subject, user?.name);
+  }, [subject, user]);
 
   const endSession = useCallback(async () => {
     const session = sessionRef.current;
@@ -168,6 +192,15 @@ function TutorContent() {
 
   const isActive = state !== "idle" && state !== "error";
 
+  // Wait for the demo-auth check before rendering anything.
+  if (!authChecked) {
+    return (
+      <main className="ambient-bg flex flex-1 items-center justify-center">
+        <p className="text-slate-400">Loading KT...</p>
+      </main>
+    );
+  }
+
   // Microphone gate: verify the mic works before the session can start.
   if (!micCheckDone) {
     return (
@@ -189,6 +222,13 @@ function TutorContent() {
         <div className="mt-10 flex w-full flex-1 items-center justify-center">
           <MicCheck onPassed={() => setMicCheckDone(true)} />
         </div>
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="mt-8 rounded-full border border-white/15 bg-white/5 px-6 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-white/10 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+        >
+          Log out{user ? ` (${user.name})` : ""}
+        </button>
       </main>
     );
   }
@@ -210,6 +250,14 @@ function TutorContent() {
             {subject}
           </span>
         )}
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="text-sm text-slate-400 transition-colors hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+          aria-label="Log out"
+        >
+          Log out
+        </button>
       </div>
 
       {summary ? (
