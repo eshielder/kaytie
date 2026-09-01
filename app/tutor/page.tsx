@@ -11,6 +11,7 @@ import SessionSummary from "@/components/SessionSummary";
 import MicCheck from "@/components/MicCheck";
 import AmbientMusic from "@/components/AmbientMusic";
 import { demoLogout, getDemoUser, type DemoUser } from "@/lib/demoAuth";
+import { getSelectedVoice } from "@/lib/voices";
 import { useRouter } from "next/navigation";
 import { VoiceAgentSession } from "@/lib/assemblyai/client";
 import type {
@@ -127,7 +128,7 @@ function TutorContent() {
     });
 
     sessionRef.current = session;
-    await session.start(subject, user?.name);
+    await session.start(subject, user?.name, getSelectedVoice());
   }, [subject, user]);
 
   const endSession = useCallback(async () => {

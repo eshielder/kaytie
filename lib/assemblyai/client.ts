@@ -64,7 +64,7 @@ export class VoiceAgentSession {
     return this.muted;
   }
 
-  async start(subject?: string, learnerName?: string): Promise<void> {
+  async start(subject?: string, learnerName?: string, voice?: string): Promise<void> {
     this.callbacks.onStateChange("connecting");
 
     // 1. Mint a single-use token server-side (API key stays on the server).
@@ -100,7 +100,7 @@ export class VoiceAgentSession {
 
     // 3. Connect the WebSocket to the Voice Agent.
     try {
-      await this.connectWebSocket(token, subject, learnerName);
+      await this.connectWebSocket(token, subject, learnerName, voice);
     } catch {
       this.fail(
         "connection_failed",
@@ -129,7 +129,12 @@ export class VoiceAgentSession {
     }
   }
 
-  private connectWebSocket(token: string, subject?: string, learnerName?: string): Promise<void> {
+  private connectWebSocket(
+    token: string,
+    subject?: string,
+    learnerName?: string,
+    voice?: string
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
       const ws = new WebSocket(`${VOICE_AGENT_WS_URL}?token=${encodeURIComponent(token)}`);
       this.ws = ws;
@@ -155,7 +160,10 @@ export class VoiceAgentSession {
                 format: { encoding: "audio/pcm", sample_rate: 24000 },
                 turn_detection: { interrupt_response: true },
               },
-              output: { format: { encoding: "audio/pcm", sample_rate: 24000 } },
+              output: {
+                format: { encoding: "audio/pcm", sample_rate: 24000 },
+                voice: voice || undefined,
+              },
             },
           })
         );

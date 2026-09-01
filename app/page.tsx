@@ -6,6 +6,7 @@ import KTLogo from "@/components/KTLogo";
 import { SUBJECTS } from "@/lib/tutor/prompt";
 import { demoLogin, demoLogout, getDemoUser, type DemoUser } from "@/lib/demoAuth";
 import { speakWelcome, stopWelcome } from "@/lib/welcome";
+import { DEFAULT_VOICE, VOICES, getSelectedVoice, setSelectedVoice } from "@/lib/voices";
 
 const DEMO_USER_NAME = "Pal";
 
@@ -13,10 +14,17 @@ export default function Landing() {
   const [user, setUser] = useState<DemoUser | null>(null);
   const [checked, setChecked] = useState(false);
   const [nameInput, setNameInput] = useState("");
+  const [voice, setVoice] = useState<string>(DEFAULT_VOICE);
 
   useEffect(() => {
     setUser(getDemoUser());
+    setVoice(getSelectedVoice());
     setChecked(true);
+  }, []);
+
+  const handleVoiceChange = useCallback((id: string) => {
+    setSelectedVoice(id);
+    setVoice(id);
   }, []);
 
   const handleLogin = useCallback(
@@ -69,6 +77,31 @@ export default function Landing() {
             >
               🎙 Start Learning
             </Link>
+
+            {/* KT voice picker */}
+            <div className="mt-8 w-full rounded-3xl border border-white/10 bg-white/5 p-5">
+              <label
+                htmlFor="kt-voice"
+                className="mb-1 block text-xs font-semibold uppercase tracking-widest text-slate-500"
+              >
+                KT&apos;s voice
+              </label>
+              <select
+                id="kt-voice"
+                value={voice}
+                onChange={(e) => handleVoiceChange(e.target.value)}
+                className="w-full rounded-xl border border-white/15 bg-slate-900 px-4 py-3 text-base text-white focus:border-sky-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+              >
+                {VOICES.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.label} — {v.accent === "US" ? "🇺🇸 American" : "🇬🇧 British"}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-2 text-xs text-slate-500">
+                Used for every session until you change it.
+              </p>
+            </div>
 
             <div className="mt-14">
               <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-slate-500">
