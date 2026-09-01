@@ -8,6 +8,7 @@ import VoiceVisualizer from "@/components/VoiceVisualizer";
 import VoiceButton from "@/components/VoiceButton";
 import Conversation from "@/components/Conversation";
 import SessionSummary from "@/components/SessionSummary";
+import MicCheck from "@/components/MicCheck";
 import { VoiceAgentSession } from "@/lib/assemblyai/client";
 import type {
   SessionState,
@@ -32,6 +33,7 @@ function TutorContent() {
   const [muted, setMuted] = useState(false);
   const [summary, setSummary] = useState<SessionSummaryData | null>(null);
   const [ending, setEnding] = useState(false);
+  const [micCheckDone, setMicCheckDone] = useState(false);
 
   const sessionRef = useRef<VoiceAgentSession | null>(null);
   const transcriptRef = useRef<TranscriptEntry[]>([]);
@@ -165,6 +167,31 @@ function TutorContent() {
   }, []);
 
   const isActive = state !== "idle" && state !== "error";
+
+  // Microphone gate: verify the mic works before the session can start.
+  if (!micCheckDone) {
+    return (
+      <main className="ambient-bg flex flex-1 flex-col items-center justify-center px-6 py-10">
+        <div className="flex w-full max-w-md items-center justify-between">
+          <Link
+            href="/"
+            className="text-sm text-slate-400 transition-colors hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+            aria-label="Back to home"
+          >
+            ← KT
+          </Link>
+          {subject && (
+            <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
+              {subject}
+            </span>
+          )}
+        </div>
+        <div className="mt-10 flex w-full flex-1 items-center justify-center">
+          <MicCheck onPassed={() => setMicCheckDone(true)} />
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="ambient-bg flex flex-1 flex-col items-center px-6 py-10">

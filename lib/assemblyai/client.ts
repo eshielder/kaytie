@@ -184,6 +184,7 @@ export class VoiceAgentSession {
   private handleMessage(msg: Record<string, unknown>): void {
     switch (msg.type) {
       case "session.ready":
+        console.debug("[KT] session.ready — streaming mic audio to the agent");
         this.sessionReady = true;
         this.callbacks.onStateChange("listening");
         break;
