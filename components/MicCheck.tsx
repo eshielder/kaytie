@@ -92,6 +92,7 @@ export default function MicCheck({ onPassed }: MicCheckProps) {
   const [heard, setHeard] = useState<string>("");
   const [status, setStatus] = useState<string>("");
   const [failed, setFailed] = useState<string>("");
+  const [failCount, setFailCount] = useState(0);
 
   const ctxRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -125,6 +126,18 @@ export default function MicCheck({ onPassed }: MicCheckProps) {
     setStatus("Requesting microphone access...");
     setStage("listening");
 
+    // Microphone + speech APIs require a secure context. When testing from a
+    // phone via http://<lan-ip>:3000 they are blocked entirely — explain it
+    // instead of failing silently.
+    if (typeof window !== "undefined" && !window.isSecureContext) {
+      setStage("intro");
+      setFailCount((c) => c + 1);
+      setFailed(
+        "This page is not using HTTPS, so your browser blocks microphone access on mobile. Open KT over HTTPS (e.g. deploy it, or use a tunnel like `npx localtunnel --port 3000`) or test on this computer via http://localhost."
+      );
+      return;
+    }
+
     let ctx: AudioContext;
     let stream: MediaStream;
     try {
@@ -136,6 +149,7 @@ export default function MicCheck({ onPassed }: MicCheckProps) {
     } catch (err) {
       const name = (err as DOMException)?.name;
       setStage("intro");
+      setFailCount((c) => c + 1);
       setFailed(
         name === "NotFoundError"
           ? "No microphone found. Please connect one and try again."
@@ -201,6 +215,7 @@ export default function MicCheck({ onPassed }: MicCheckProps) {
       if (!sawSound) {
         teardown();
         setStage("intro");
+        setFailCount((c) => c + 1);
         setFailed(
           "Your microphone picked up no sound while you spoke. Check that the correct input device is selected and not muted in your system settings."
         );
@@ -215,6 +230,7 @@ export default function MicCheck({ onPassed }: MicCheckProps) {
       } else {
         teardown();
         setStage("intro");
+        setFailCount((c) => c + 1);
         setFailed(
           finalText.trim()
             ? `I heard "${finalText.trim()}" instead of the test phrase. Your voice reaches the microphone but recognition is poor — try moving closer, reducing background noise, or picking a different input device.`
@@ -252,7 +268,7 @@ export default function MicCheck({ onPassed }: MicCheckProps) {
   }, [onPassed, teardown]);
 
   return (
-    <div className="flex w-full max-w-md flex-col items-center gap-6 rounded-3xl border border-white/10 bg-white/5 p-8">
+    <div className="flex w-full max-w-md flex-col items-center gap-6 rounded-3xl border border-white/10 bg-white/5 p-6 sm:p-8">
       <h2 className="text-xl font-semibold text-white">Microphone Check</h2>
 
       {stage === "intro" && (
@@ -301,13 +317,27 @@ export default function MicCheck({ onPassed }: MicCheckProps) {
       )}
 
       {stage !== "listening" ? (
-        <button
-          type="button"
-          onClick={() => void runTest()}
-          className="rounded-full bg-gradient-to-r from-violet-500 to-sky-400 px-8 py-4 text-base font-semibold text-white shadow-lg shadow-violet-500/30 transition-all duration-200 hover:scale-[1.03] hover:shadow-violet-500/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
-        >
-          {failed ? "🔄 Try Again" : "🎙 Test My Microphone"}
-        </button>
+        <div className="flex w-full flex-col items-center gap-3">
+          <button
+            type="button"
+            onClick={() => void runTest()}
+            className="w-full max-w-xs rounded-2xl bg-gradient-to-r from-violet-500 to-sky-400 px-8 py-4 text-base font-semibold text-white shadow-lg shadow-violet-500/30 transition-all duration-200 hover:scale-[1.03] hover:shadow-violet-500/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+          >
+            {failed ? "🔄 Try Again" : "🎙 Test My Microphone"}
+          </button>
+          {failCount > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                teardown();
+                onPassed();
+              }}
+              className="rounded-2xl border border-white/15 bg-white/10 px-6 py-3 text-sm font-medium text-slate-200 hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+            >
+              Skip test and continue anyway
+            </button>
+          )}
+        </div>
       ) : (
         <button
           type="button"
