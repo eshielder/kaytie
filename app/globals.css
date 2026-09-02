@@ -60,3 +60,15 @@ body {
     radial-gradient(60% 50% at 50% 0%, rgba(139, 92, 246, 0.14), transparent 70%),
     radial-gradient(50% 40% at 80% 100%, rgba(56, 189, 248, 0.1), transparent 70%);
 }
+
+/* Respect users who prefer reduced motion (accessibility) */
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse-soft,
+  .animate-fade-up,
+  .animate-pulse {
+    animation: none !important;
+  }
+  * {
+    scroll-behavior: auto !important;
+  }
+}

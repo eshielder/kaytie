@@ -6,6 +6,20 @@ import KTLogo from "@/components/KTLogo";
 import { SUBJECTS } from "@/lib/tutor/prompt";
 import { demoLogin, demoLogout, getDemoUser, type DemoUser } from "@/lib/demoAuth";
 import { speakWelcome, stopWelcome } from "@/lib/welcome";
+import {
+  getDifficulty,
+  setDifficulty,
+  getLanguageMode,
+  setLanguageMode,
+  getBargeIn,
+  setBargeIn,
+  type LanguageMode,
+  type Difficulty,
+  LANGUAGE_VOICES,
+} from "@/lib/voices";
+import { getSessionHistory, getProgressStats, clearSessionHistory, type ProgressStats } from "@/lib/history";
+import { getVocabulary, vocabularyToCsv, removeVocabTerm } from "@/lib/vocab";
+import type { SessionRecord } from "@/types/voice";
 import { DEFAULT_VOICE, VOICES, getSelectedVoice, setSelectedVoice } from "@/lib/voices";
 
 const DEMO_USER_NAME = "Pal";
@@ -15,16 +29,39 @@ export default function Landing() {
   const [checked, setChecked] = useState(false);
   const [nameInput, setNameInput] = useState("");
   const [voice, setVoice] = useState<string>(DEFAULT_VOICE);
+  const [difficulty, setDifficultyState] = useState<Difficulty>("intermediate");
+  const [language, setLanguageState] = useState<LanguageMode>(null);
+  const [bargeIn, setBargeInState] = useState(false);
+  const [stats, setStats] = useState<ProgressStats | null>(null);
+  const [history, setHistory] = useState<SessionRecord[]>([]);
+  const [vocabulary, setVocabulary] = useState<{ term: string; note?: string }[]>([]);
+  const [showVocab, setShowVocab] = useState(false);
+  const [pastLessons, setPastLessons] = useState(false);
+
+  const refreshLocalData = useCallback(() => {
+    setStats(getProgressStats());
+    setHistory(getSessionHistory());
+    setVocabulary(getVocabulary());
+  }, []);
 
   useEffect(() => {
     setUser(getDemoUser());
     setVoice(getSelectedVoice());
+    setDifficultyState(getDifficulty());
+    setLanguageState(getLanguageMode());
+    setBargeInState(getBargeIn());
+    refreshLocalData();
     setChecked(true);
-  }, []);
+  }, [refreshLocalData]);
 
   const handleVoiceChange = useCallback((id: string) => {
     setSelectedVoice(id);
     setVoice(id);
+  }, []);
+
+  const handleLanguageChange = useCallback((mode: LanguageMode) => {
+    setLanguageMode(mode);
+    setLanguageState(mode);
   }, []);
 
   const handleLogin = useCallback(
@@ -102,6 +139,192 @@ export default function Landing() {
                 Used for every session until you change it.
               </p>
             </div>
+
+            {/* Difficulty level */}
+            <div className="mt-4 w-full rounded-3xl border border-white/10 bg-white/5 p-5">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-500">
+                Difficulty level
+              </p>
+              <div className="flex gap-2">
+                {(["beginner", "intermediate", "advanced"] as const).map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => {
+                      setDifficulty(d);
+                      setDifficultyState(d);
+                    }}
+                    className={`flex-1 rounded-xl border px-3 py-2.5 text-sm font-medium capitalize transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 ${
+                      difficulty === d
+                        ? "border-sky-400/50 bg-sky-500/20 text-white"
+                        : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
+                    }`}
+                  >
+                    {d}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Language practice mode */}
+            <div className="mt-4 w-full rounded-3xl border border-white/10 bg-white/5 p-5">
+              <label htmlFor="kt-language" className="mb-2 block text-xs font-semibold uppercase tracking-widest text-slate-500">
+                Language practice (optional)
+              </label>
+              <select
+                id="kt-language"
+                value={language ?? ""}
+                onChange={(e) => handleLanguageChange((e.target.value || null) as LanguageMode)}
+                className="w-full rounded-xl border border-white/15 bg-slate-900 px-4 py-3 text-base text-white focus:border-sky-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+              >
+                <option value="">Off — subject tutor</option>
+                <option value="spanish">🇪🇸 Spanish practice</option>
+                <option value="french">🇫🇷 French practice</option>
+                <option value="german">🇩🇪 German practice</option>
+                <option value="italian">🇮🇹 Italian practice</option>
+                <option value="portuguese">🇵🇹 Portuguese practice</option>
+              </select>
+              {language && (
+                <p className="mt-2 text-xs text-slate-500">
+                  KT will use a native {language} voice and converse in {language}.
+                </p>
+              )}
+            </div>
+
+            {/* Barge-in setting */}
+            <div className="mt-4 flex w-full items-center justify-between rounded-3xl border border-white/10 bg-white/5 p-5">
+              <div className="text-left">
+                <p className="text-sm font-medium text-white">Allow interrupting KT</p>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Best with headphones. Off = wait for KT to finish (recommended on phones).
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={bargeIn}
+                onClick={() => {
+                  setBargeIn(!bargeIn);
+                  setBargeInState(!bargeIn);
+                }}
+                className={`relative h-7 w-12 shrink-0 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 ${
+                  bargeIn ? "bg-sky-500" : "bg-white/15"
+                }`}
+              >
+                <span className={`absolute top-1 h-5 w-5 rounded-full bg-white transition-all ${bargeIn ? "left-6" : "left-1"}`} />
+              </button>
+            </div>
+
+            {/* Learning journey (progress dashboard) */}
+            {stats && stats.totalSessions > 0 && (
+              <div className="mt-4 w-full rounded-3xl border border-white/10 bg-white/5 p-5 text-left">
+                <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-500">
+                  Your learning journey
+                </p>
+                <div className="grid grid-cols-4 gap-2 text-center">
+                  {[
+                    { label: "Sessions", value: stats.totalSessions },
+                    { label: "Minutes", value: stats.totalMinutes },
+                    { label: "Streak", value: stats.currentStreak },
+                    { label: "Subjects", value: stats.subjectsCovered },
+                  ].map((s) => (
+                    <div key={s.label} className="rounded-xl bg-white/5 py-3">
+                      <p className="text-lg font-bold text-white">{s.value}</p>
+                      <p className="text-[10px] uppercase tracking-wide text-slate-500">{s.label}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {history.length > 0 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setPastLessons(!pastLessons)}
+                      className="mt-3 text-xs font-medium text-sky-300 hover:text-sky-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+                    >
+                      {pastLessons ? "▾ Hide recent sessions" : "▸ Show recent sessions"}
+                    </button>
+                    {pastLessons && (
+                      <ul className="mt-2 space-y-2">
+                        {history.slice(0, 5).map((r, i) => (
+                          <li key={i} className="rounded-xl bg-white/5 px-3 py-2 text-sm">
+                            <p className="font-medium text-slate-200">{r.topic}</p>
+                            <p className="text-xs text-slate-500">
+                              {new Date(r.date).toLocaleDateString()} · {Math.max(1, Math.round(r.durationSeconds / 60))} min
+                              {r.subject ? ` · ${r.subject}` : ""}
+                            </p>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm("Clear your local session history?")) {
+                      clearSessionHistory();
+                      refreshLocalData();
+                    }
+                  }}
+                  className="mt-3 text-xs text-slate-600 hover:text-rose-300 focus:outline-none"
+                >
+                  Clear history
+                </button>
+              </div>
+            )}
+
+            {/* Vocabulary notebook */}
+            {vocabulary.length > 0 && (
+              <div className="mt-4 w-full rounded-3xl border border-white/10 bg-white/5 p-5 text-left">
+                <button
+                  type="button"
+                  onClick={() => setShowVocab(!showVocab)}
+                  className="flex w-full items-center justify-between text-xs font-semibold uppercase tracking-widest text-slate-500 focus:outline-none"
+                >
+                  <span>Vocabulary notebook ({vocabulary.length})</span>
+                  <span>{showVocab ? "▾" : "▸"}</span>
+                </button>
+                {showVocab && (
+                  <>
+                    <ul className="mt-3 space-y-1.5">
+                      {vocabulary.slice(0, 12).map((v) => (
+                        <li key={v.term} className="flex items-center justify-between gap-2 text-sm">
+                          <span className="text-slate-200">{v.term}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              removeVocabTerm(v.term);
+                              refreshLocalData();
+                            }}
+                            aria-label={`Remove ${v.term}`}
+                            className="text-xs text-slate-600 hover:text-rose-300 focus:outline-none"
+                          >
+                            ✕
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const blob = new Blob([vocabularyToCsv()], { type: "text/csv" });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = "kt-vocabulary.csv";
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      }}
+                      className="mt-3 text-xs font-medium text-sky-300 hover:text-sky-200 focus:outline-none"
+                    >
+                      ⬇ Export as CSV (Anki-ready)
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
 
             <div className="mt-14">
               <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-slate-500">

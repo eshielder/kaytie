@@ -11,6 +11,12 @@ export const metadata: Metadata = {
   title: "KT — Learn by talking",
   description:
     "KT is a voice-first AI tutor. Press start, speak naturally, and learn by talking.",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    title: "KT",
+    statusBarStyle: "black-translucent",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

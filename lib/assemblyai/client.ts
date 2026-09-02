@@ -36,6 +36,13 @@ export class VoiceAgentSession {
   private endedByUser = false;
   private cleanedUp = false;
   private muted = false;
+  /** AssemblyAI session id (from session.ready) — used for recordings. */
+  private sessionId: string | null = null;
+  /** When enabled, the mic keeps streaming while KT talks (desktop barge-in). */
+  private allowBargeIn = false;
+  /** Timestamp of the last user/agent activity — drives the silence nudge. */
+  private lastActivity = 0;
+  private nudgeTimer: number | null = null;
   /**
    * Phones have weak echo cancellation: KT's speaker audio leaks into the mic,
    * gets transcribed as "user" speech and interrupts her own reply (audio
@@ -64,7 +71,17 @@ export class VoiceAgentSession {
     return this.muted;
   }
 
-  async start(subject?: string, learnerName?: string, voice?: string): Promise<void> {
+  /** AssemblyAI session id once known (after session.ready). */
+  get id(): string | null {
+    return this.sessionId;
+  }
+
+  async start(
+    subject?: string,
+    learnerName?: string,
+    voice?: string,
+    options?: { difficulty?: string; language?: string | null; bargeIn?: boolean }
+  ): Promise<void> {
     this.callbacks.onStateChange("connecting");
 
     // 1. Mint a single-use token server-side (API key stays on the server).
@@ -100,7 +117,7 @@ export class VoiceAgentSession {
 
     // 3. Connect the WebSocket to the Voice Agent.
     try {
-      await this.connectWebSocket(token, subject, learnerName, voice);
+      await this.connectWebSocket(token, subject, learnerName, voice, options);
     } catch {
       this.fail(
         "connection_failed",
@@ -133,7 +150,8 @@ export class VoiceAgentSession {
     token: string,
     subject?: string,
     learnerName?: string,
-    voice?: string
+    voice?: string,
+    options?: { difficulty?: string; language?: string | null; bargeIn?: boolean }
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       const ws = new WebSocket(`${VOICE_AGENT_WS_URL}?token=${encodeURIComponent(token)}`);
@@ -154,8 +172,8 @@ export class VoiceAgentSession {
           JSON.stringify({
             type: "session.update",
             session: {
-              system_prompt: buildSystemPrompt(subject, learnerName),
-              greeting: buildGreeting(learnerName),
+              system_prompt: buildSystemPrompt(subject, learnerName, options?.difficulty, options?.language),
+              greeting: buildGreeting(learnerName, options?.language),
               input: {
                 format: { encoding: "audio/pcm", sample_rate: 24000 },
                 turn_detection: { interrupt_response: true },
@@ -167,6 +185,9 @@ export class VoiceAgentSession {
             },
           })
         );
+        this.allowBargeIn = options?.bargeIn ?? false;
+        this.lastActivity = Date.now();
+        this.startNudgeTimer();
         this.startMicCapture();
         window.setTimeout(() => {
           if (!this.sessionReady && this.ws === ws) {
@@ -214,6 +235,7 @@ export class VoiceAgentSession {
     switch (msg.type) {
       case "session.ready":
         console.debug("[KT] session.ready — streaming mic audio to the agent");
+        this.sessionId = typeof msg.session_id === "string" ? msg.session_id : null;
         this.sessionReady = true;
         this.callbacks.onStateChange("listening");
         break;
@@ -235,6 +257,7 @@ export class VoiceAgentSession {
 
       case "input.speech.started":
         // Barge-in: the user started speaking while KT was talking.
+        this.lastActivity = Date.now();
         this.flushOutput();
         this.callbacks.onStateChange("listening");
         break;
@@ -244,10 +267,12 @@ export class VoiceAgentSession {
         break;
 
       case "input.speech.stopped":
+        this.lastActivity = Date.now();
         this.callbacks.onStateChange("thinking");
         break;
 
       case "transcript.user":
+        this.lastActivity = Date.now();
         this.callbacks.onUserFinal(String(msg.text ?? msg.transcript ?? ""));
         break;
 
@@ -270,6 +295,7 @@ export class VoiceAgentSession {
 
       case "reply.done":
         if (msg.status === "interrupted") this.flushOutput();
+        this.lastActivity = Date.now();
         this.callbacks.onStateChange("listening");
         break;
 
@@ -299,7 +325,8 @@ export class VoiceAgentSession {
       if (this.muted || !this.sessionReady) return;
       // Half-duplex (mobile): drop mic audio while KT is speaking so her
       // speaker output can't be echoed back and interrupt her own reply.
-      if (this.halfDuplex && this.agentSpeaking()) return;
+      // Skipped when the user explicitly enabled barge-in (e.g. headphones).
+      if (!this.allowBargeIn && this.halfDuplex && this.agentSpeaking()) return;
       this.sendAudioChunk(event.data);
     };
 
@@ -328,6 +355,36 @@ export class VoiceAgentSession {
       this.outputSources.size > 0 &&
       this.nextPlayTime > ctx.currentTime + 0.05
     );
+  }
+
+  /**
+   * Silence nudge: if the learner has been quiet for ~45s while the session
+   * is listening, ask KT (via reply.create) to check in with an engaging
+   * question so the conversation never stalls.
+   */
+  private startNudgeTimer(): void {
+    if (this.nudgeTimer !== null) return;
+    this.nudgeTimer = window.setInterval(() => {
+      if (!this.sessionReady || this.cleanedUp) return;
+      if (Date.now() - this.lastActivity < 45_000) return;
+      this.lastActivity = Date.now();
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.ws.send(
+          JSON.stringify({
+            type: "reply.create",
+            instructions:
+              "The learner has been quiet for a while. Gently check in on them by name, and offer a fun quick question, mini-quiz, or an easier next step related to what you've been discussing.",
+          })
+        );
+      }
+    }, 10_000);
+  }
+
+  private stopNudgeTimer(): void {
+    if (this.nudgeTimer !== null) {
+      window.clearInterval(this.nudgeTimer);
+      this.nudgeTimer = null;
+    }
   }
 
   private sendAudioChunk(buffer: ArrayBuffer): void {
@@ -418,6 +475,7 @@ export class VoiceAgentSession {
     if (this.cleanedUp) return;
     this.cleanedUp = true;
     this.sessionReady = false;
+    this.stopNudgeTimer();
     this.flushOutput();
 
     try {

@@ -21,6 +21,9 @@ export interface SummaryMessage {
 export interface SessionSummaryData {
   topic: string;
   learned: string[];
+  key_terms?: string[];
+  quiz?: { question: string; answer: string }[];
+  exercise?: string;
 }
 
 export type VoiceErrorKind =
@@ -30,3 +33,16 @@ export type VoiceErrorKind =
   | "config"
   | "playback"
   | "timeout";
+
+/** A finished learning session, stored in localStorage for progress tracking. */
+export interface SessionRecord {
+  /** AssemblyAI session id, when known (enables recording playback). */
+  sessionId?: string;
+  date: string; // ISO timestamp
+  subject?: string;
+  difficulty?: string;
+  topic: string;
+  learned: string[];
+  turns: number;
+  durationSeconds: number;
+}

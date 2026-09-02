@@ -42,3 +42,104 @@ export function setSelectedVoice(id: string): void {
     /* ignore */
   }
 }
+
+/** Practice language for language-tutor mode (null = normal subject tutor). */
+export type LanguageMode = "spanish" | "french" | "german" | "italian" | "portuguese" | null;
+
+const LANGUAGE_KEY = "kt-language";
+
+export function getLanguageMode(): LanguageMode {
+  if (typeof window === "undefined") return null;
+  try {
+    const v = localStorage.getItem(LANGUAGE_KEY);
+    if (v === "spanish" || v === "french" || v === "german" || v === "italian" || v === "portuguese") {
+      return v;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function setLanguageMode(mode: LanguageMode): void {
+  try {
+    if (mode) localStorage.setItem(LANGUAGE_KEY, mode);
+    else localStorage.removeItem(LANGUAGE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Native-accent voice for each language-tutor mode. */
+export const LANGUAGE_VOICES: Record<Exclude<LanguageMode, null>, string> = {
+  spanish: "lola",
+  french: "estelle",
+  german: "juergen",
+  italian: "giovanni",
+  portuguese: "rafael",
+};
+
+const DIFFICULTY_KEY = "kt-difficulty";
+export type Difficulty = "beginner" | "intermediate" | "advanced";
+
+export function getDifficulty(): Difficulty {
+  if (typeof window === "undefined") return "intermediate";
+  try {
+    const v = localStorage.getItem(DIFFICULTY_KEY);
+    if (v === "beginner" || v === "intermediate" || v === "advanced") return v;
+    return "intermediate";
+  } catch {
+    return "intermediate";
+  }
+}
+
+export function setDifficulty(d: Difficulty): void {
+  try {
+    localStorage.setItem(DIFFICULTY_KEY, d);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Allow interrupting KT mid-sentence (barge-in). Desktop users usually want this. */
+const BARGE_IN_KEY = "kt-barge-in";
+
+export function getBargeIn(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(BARGE_IN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function setBargeIn(on: boolean): void {
+  try {
+    localStorage.setItem(BARGE_IN_KEY, on ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+}
+
+/** UI text size ("normal" | "large"), persisted. */
+const TEXT_SIZE_KEY = "kt-text-size";
+
+export function getTextSize(): "normal" | "large" {
+  if (typeof window === "undefined") return "normal";
+  try {
+    return localStorage.getItem(TEXT_SIZE_KEY) === "large" ? "large" : "normal";
+  } catch {
+    return "normal";
+  }
+}
+
+export function setTextSize(size: "normal" | "large"): void {
+  try {
+    localStorage.setItem(TEXT_SIZE_KEY, size);
+  } catch {
+    /* ignore */
+  }
+  if (typeof document !== "undefined") {
+    document.documentElement.style.fontSize = size === "large" ? "112.5%" : "";
+  }
+}

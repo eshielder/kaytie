@@ -11,12 +11,14 @@ import SessionSummary from "@/components/SessionSummary";
 import MicCheck from "@/components/MicCheck";
 import AmbientMusic from "@/components/AmbientMusic";
 import { demoLogout, getDemoUser, type DemoUser } from "@/lib/demoAuth";
-import { getSelectedVoice } from "@/lib/voices";
+import { getSelectedVoice, getDifficulty, getLanguageMode, getBargeIn, setTextSize, getTextSize, LANGUAGE_VOICES } from "@/lib/voices";
+import { addSessionRecord } from "@/lib/history";
 import { useRouter } from "next/navigation";
 import { VoiceAgentSession } from "@/lib/assemblyai/client";
 import type {
   SessionState,
   SessionSummaryData,
+  SummaryMessage,
   TranscriptEntry,
 } from "@/types/voice";
 
@@ -41,7 +43,10 @@ function TutorContent() {
   const [muted, setMuted] = useState(false);
   const [summary, setSummary] = useState<SessionSummaryData | null>(null);
   const [ending, setEnding] = useState(false);
+  const [sessionMessages, setSessionMessages] = useState<SummaryMessage[]>([]);
   const [micCheckDone, setMicCheckDone] = useState(false);
+  const [textSize, setTextSizeState] = useState<"normal" | "large">("normal");
+  const sessionStartedAt = useRef<number>(0);
 
   const sessionRef = useRef<VoiceAgentSession | null>(null);
   const transcriptRef = useRef<TranscriptEntry[]>([]);
@@ -59,6 +64,9 @@ function TutorContent() {
     }
     setUser(u);
     setAuthChecked(true);
+    const size = getTextSize();
+    setTextSizeState(size);
+    setTextSize(size);
   }, [router]);
 
   const handleLogout = useCallback(() => {
@@ -128,7 +136,14 @@ function TutorContent() {
     });
 
     sessionRef.current = session;
-    await session.start(subject, user?.name, getSelectedVoice());
+    sessionStartedAt.current = Date.now();
+    const language = getLanguageMode();
+    const selectedVoice = language ? LANGUAGE_VOICES[language] : getSelectedVoice();
+    await session.start(subject, user?.name, selectedVoice, {
+      difficulty: getDifficulty(),
+      language,
+      bargeIn: getBargeIn(),
+    });
   }, [subject, user]);
 
   const endSession = useCallback(async () => {
@@ -141,7 +156,9 @@ function TutorContent() {
     const messages = transcriptRef.current
       .filter((e) => e.text.trim().length > 0 && !e.partial)
       .map((e) => ({ speaker: e.speaker, text: e.text }));
+    setSessionMessages(messages);
 
+    let finalSummary: SessionSummaryData | null = null;
     try {
       const res = await fetch("/api/voice/summary", {
         method: "POST",
@@ -149,19 +166,32 @@ function TutorContent() {
         body: JSON.stringify({ messages }),
       });
       if (res.ok) {
-        setSummary((await res.json()) as SessionSummaryData);
+        finalSummary = (await res.json()) as SessionSummaryData;
       } else {
-        setSummary({
+        finalSummary = {
           topic: subject ?? "What we talked about",
           learned: ["A voice learning session with KT"],
-        });
+        };
       }
     } catch {
-      setSummary({
+      finalSummary = {
         topic: subject ?? "What we talked about",
         learned: ["A voice learning session with KT"],
-      });
+      };
     }
+    setSummary(finalSummary);
+
+    // Persist the finished session locally for the progress dashboard.
+    addSessionRecord({
+      sessionId: session.id ?? undefined,
+      date: new Date().toISOString(),
+      subject,
+      difficulty: getDifficulty(),
+      topic: finalSummary?.topic ?? subject ?? "Voice learning session",
+      learned: finalSummary?.learned ?? [],
+      turns: messages.filter((m) => m.speaker === "user").length,
+      durationSeconds: Math.round((Date.now() - sessionStartedAt.current) / 1000),
+    });
 
     sessionRef.current = null;
     setEnding(false);
@@ -260,12 +290,27 @@ function TutorContent() {
         >
           Log out
         </button>
+        <button
+          type="button"
+          onClick={() => {
+            const next = textSize === "normal" ? "large" : "normal";
+            setTextSize(next);
+            setTextSizeState(next);
+          }}
+          className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-300 hover:bg-white/10 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+          aria-label="Toggle larger text"
+        >
+          {textSize === "large" ? "A−" : "A+"}
+        </button>
       </div>
 
       {summary ? (
         <div className="mt-10 flex w-full flex-1 items-start justify-center">
           <SessionSummary
             summary={summary}
+            transcript={sessionMessages}
+            learnerName={user?.name}
+            subject={subject}
             onStartAnother={() => void startSession()}
             onLearnSomethingElse={() => {
               setSummary(null);
