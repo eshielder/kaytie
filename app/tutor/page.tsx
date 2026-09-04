@@ -45,6 +45,7 @@ function TutorContent() {
   const [ending, setEnding] = useState(false);
   const [sessionMessages, setSessionMessages] = useState<SummaryMessage[]>([]);
   const [micCheckDone, setMicCheckDone] = useState(false);
+  const [showMicCheck, setShowMicCheck] = useState(false);
   const [textSize, setTextSizeState] = useState<"normal" | "large">("normal");
   const sessionStartedAt = useRef<number>(0);
 
@@ -233,38 +234,6 @@ function TutorContent() {
     );
   }
 
-  // Microphone gate: verify the mic works before the session can start.
-  if (!micCheckDone) {
-    return (
-      <main className="ambient-bg flex flex-1 flex-col items-center justify-center px-6 py-10">
-        <div className="flex w-full max-w-md items-center justify-between">
-          <Link
-            href="/"
-            className="text-sm text-slate-400 transition-colors hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
-            aria-label="Back to home"
-          >
-            ← KT
-          </Link>
-          {subject && (
-            <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
-              {subject}
-            </span>
-          )}
-        </div>
-        <div className="mt-10 flex w-full flex-1 items-center justify-center">
-          <MicCheck onPassed={() => setMicCheckDone(true)} />
-        </div>
-        <button
-          type="button"
-          onClick={handleLogout}
-          className="mt-8 rounded-full border border-white/15 bg-white/5 px-6 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-white/10 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
-        >
-          Log out{user ? ` (${user.name})` : ""}
-        </button>
-      </main>
-    );
-  }
-
   return (
     <main className="ambient-bg flex flex-1 flex-col items-center px-6 py-10">
       {/* Session controls */}
@@ -339,12 +308,34 @@ function TutorContent() {
 
           {/* Controls */}
           {!isActive ? (
-            <VoiceButton
-              label={state === "error" ? "Try Again" : "🎙 Start Learning"}
-              onClick={() => void startSession()}
-              disabled={(state as string) === "connecting"}
-              ariaLabel="Start learning session"
-            />
+            <div className="flex flex-col items-center gap-3">
+              <VoiceButton
+                label={state === "error" ? "Try Again" : "🎙 Start Learning"}
+                onClick={() => void startSession()}
+                disabled={(state as string) === "connecting"}
+                ariaLabel="Start learning session"
+              />
+              {!showMicCheck ? (
+                <button
+                  type="button"
+                  onClick={() => setShowMicCheck(true)}
+                  className="text-xs font-medium text-slate-500 transition-colors hover:text-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+                >
+                  🧪 Test microphone first
+                </button>
+              ) : (
+                <div className="w-full">
+                  <MicCheck onPassed={() => { setMicCheckDone(true); setShowMicCheck(false); }} />
+                  <button
+                    type="button"
+                    onClick={() => setShowMicCheck(false)}
+                    className="mx-auto mt-3 block text-xs font-medium text-slate-500 hover:text-slate-300 focus:outline-none"
+                  >
+                    Hide test
+                  </button>
+                </div>
+              )}
+            </div>
           ) : (
             <div className="flex flex-col items-center gap-3">
               <div className="flex items-center gap-3">
