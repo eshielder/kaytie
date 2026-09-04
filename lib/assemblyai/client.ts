@@ -27,6 +27,7 @@ export class VoiceAgentSession {
   private worklet: AudioWorkletNode | null = null;
   private micSource: MediaStreamAudioSourceNode | null = null;
   private sinkGain: GainNode | null = null;
+  private outGain: GainNode | null = null;
   micAnalyser: AnalyserNode | null = null;
   outAnalyser: AnalyserNode | null = null;
 
@@ -181,6 +182,8 @@ export class VoiceAgentSession {
               output: {
                 format: { encoding: "audio/pcm", sample_rate: 24000 },
                 voice: voice || undefined,
+                // 0–100; server-side boost for quiet voices.
+                volume: 100,
               },
             },
           })
@@ -335,10 +338,14 @@ export class VoiceAgentSession {
     document.addEventListener("visibilitychange", this.onVisibilityChange);
 
     // Output path: KT's speech goes through an analyser (for the voice
-    // visualizer) and then to the speakers.
+    // visualizer), then a boost gain (the agent's native level can be quiet),
+    // and finally to the speakers.
     this.outAnalyser = ctx.createAnalyser();
     this.outAnalyser.fftSize = 256;
-    this.outAnalyser.connect(ctx.destination);
+    this.outGain = ctx.createGain();
+    this.outGain.gain.value = 2.2; // audible boost without clipping most speech
+    this.outAnalyser.connect(this.outGain);
+    this.outGain.connect(ctx.destination);
     // The worklet needs a path to the destination to keep processing,
     // but with zero gain so the mic is never audible (prevents echo).
     this.sinkGain = ctx.createGain();
@@ -493,6 +500,8 @@ export class VoiceAgentSession {
     this.micAnalyser = null;
     this.outAnalyser?.disconnect();
     this.outAnalyser = null;
+    this.outGain?.disconnect();
+    this.outGain = null;
     void this.audioCtx?.close();
     this.audioCtx = null;
   }
